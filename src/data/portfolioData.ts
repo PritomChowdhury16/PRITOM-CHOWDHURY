@@ -63,7 +63,7 @@ export const portfolioData = {
     location: 'Chattogram, Bangladesh',
     email: 'pritomchy2003@gmail.com',
     linkedinUrl: 'https://www.linkedin.com/in/pritom-chowdhury-981b22298/',
-    blogUrl: 'https://pritomchowdhury.lovable.app/',
+    blogUrl: 'https://studyhackwithai.substack.com/',
   },
   hero: {
     welcomeHeadline: "Hello, I'm Pritom.",
@@ -416,7 +416,7 @@ export const portfolioData = {
     tagline: 'Your weekly guide to leveraging Artificial Intelligence for smarter living.',
     description:
       'From productivity hacks to real-world AI tools, simplify your work, life, and learning with curated insights every week.',
-    blogUrl: 'https://pritomchowdhury.lovable.app/',
+    blogUrl: 'https://studyhackwithai.substack.com/',
     pillars: [
       {
         title: 'AI-Focused Editorial Content',

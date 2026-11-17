@@ -16,10 +16,9 @@ interface ProcessedPortraitData {
 }
 
 /**
- * Loads Pritom's studio portrait, cleanly keys out ONLY the exterior white studio
- * background via perimeter flood-fill (preserving his crisp white shirt inside the blazer),
- * feathers edges cleanly for dark-stage compositing, samples his exact blazer & skin colors,
- * and splits into Torso + Head layers so the real head can bow gracefully during Namaskar.
+ * Loads Pritom's studio portrait, keys out ONLY the exterior white studio background
+ * via perimeter flood-fill (preserving his crisp white shirt inside the tan blazer),
+ * samples exact blazer & skin colors, and splits into Torso + Head layers for bowing.
  */
 function useProcessedNamastePortrait(
   portraitUrl: string,
@@ -47,7 +46,6 @@ function useProcessedNamastePortrait(
       const imageData = ctx.getImageData(0, 0, size, size);
       const px = imageData.data;
 
-      // Sample actual blazer color (left shoulder area) and skin tone (cheek/forehead)
       const sampleRgb = (nx: number, ny: number) => {
         const sx = Math.min(size - 1, Math.max(0, Math.round(nx * size)));
         const sy = Math.min(size - 1, Math.max(0, Math.round(ny * size)));
@@ -57,8 +55,7 @@ function useProcessedNamastePortrait(
       const blazerColor = sampleRgb(0.22, 0.90);
       const skinColor = sampleRgb(0.50, 0.56);
 
-      // BFS flood-fill from top, left, and right edges ONLY (never bottom edge)
-      // so the interior white dress shirt stays 100% intact.
+      // Flood-fill from top, left, and right edges ONLY so interior white dress shirt stays intact
       const total = size * size;
       const isBg = new Uint8Array(total);
       const visited = new Uint8Array(total);
@@ -87,9 +84,7 @@ function useProcessedNamastePortrait(
         }
       };
 
-      for (let x = 0; x < size; x++) {
-        enqueue(x, 0);
-      }
+      for (let x = 0; x < size; x++) enqueue(x, 0);
       for (let y = 0; y < size; y++) {
         enqueue(0, y);
         enqueue(size - 1, y);
@@ -105,10 +100,10 @@ function useProcessedNamastePortrait(
         if (y < size - 1) enqueue(x, y + 1);
       }
 
-      // Apply clean transparency + 2px anti-aliased edge feathering + soft bottom studio fade
+      // Soft anti-aliased edge feathering + smooth lower seam blend into 3D blazer torso
       for (let y = 0; y < size; y++) {
         const bottomFade =
-          y > size * 0.88 ? Math.max(0, 1 - (y - size * 0.88) / (size * 0.12)) : 1;
+          y > size * 0.91 ? Math.max(0, 1 - (y - size * 0.91) / (size * 0.09)) : 1;
 
         for (let x = 0; x < size; x++) {
           const idx = y * size + x;
@@ -117,7 +112,6 @@ function useProcessedNamastePortrait(
           if (isBg[idx]) {
             px[p + 3] = 0;
           } else {
-            // Check 2px neighborhood for soft anti-aliased silhouette
             let bgNeighbors = 0;
             for (let dy = -2; dy <= 2; dy++) {
               for (let dx = -2; dx <= 2; dx++) {
@@ -136,8 +130,6 @@ function useProcessedNamastePortrait(
 
       ctx.putImageData(imageData, 0, 0);
 
-      // Split into Torso Layer (collar/blazer shoulders) and Head Layer (face/hair/upper neck)
-      // Overlap smoothly between v=0.59 and v=0.66 so bowing has zero visible seam.
       const makeLayerCanvas = (mode: 'torso' | 'head') => {
         const c = document.createElement('canvas');
         c.width = size;
@@ -148,8 +140,8 @@ function useProcessedNamastePortrait(
         const lData = cctx.getImageData(0, 0, size, size);
         const lp = lData.data;
 
-        const splitStart = Math.round(size * 0.57);
-        const splitEnd = Math.round(size * 0.67);
+        const splitStart = Math.round(size * 0.65);
+        const splitEnd = Math.round(size * 0.73);
 
         for (let y = 0; y < size; y++) {
           let factor = 1;
@@ -171,15 +163,12 @@ function useProcessedNamastePortrait(
         return c;
       };
 
-      const torsoCanvas = makeLayerCanvas('torso');
-      const headCanvas = makeLayerCanvas('head');
-
-      const torsoTexture = new THREE.CanvasTexture(torsoCanvas);
+      const torsoTexture = new THREE.CanvasTexture(makeLayerCanvas('torso'));
       torsoTexture.colorSpace = THREE.SRGBColorSpace;
       torsoTexture.anisotropy = Math.min(8, maxAnisotropy);
       torsoTexture.needsUpdate = true;
 
-      const headTexture = new THREE.CanvasTexture(headCanvas);
+      const headTexture = new THREE.CanvasTexture(makeLayerCanvas('head'));
       headTexture.colorSpace = THREE.SRGBColorSpace;
       headTexture.anisotropy = Math.min(8, maxAnisotropy);
       headTexture.needsUpdate = true;
@@ -188,7 +177,6 @@ function useProcessedNamastePortrait(
     };
 
     img.src = portraitUrl;
-
     return () => {
       disposed = true;
     };
@@ -245,16 +233,15 @@ export function PritomNamastePortrait3D({
   const ringRef = useRef<THREE.Mesh>(null);
   const isCompact = size.width < 900;
 
-  // Create subtly contoured 2.5D portrait plane geometry so the photo has organic volume
+  // 0.88m plane aligns Pritom's photo shoulders (±0.43m) and white shirt (±0.11m) 1:1 with the 3D blazer & arms
   const portraitPlaneGeo = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(1.56, 1.56, 24, 24);
+    const geo = new THREE.PlaneGeometry(0.88, 0.88, 24, 24);
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const y = pos.getY(i);
-      // Gentle convex relief curve toward center face & chest
-      const r2 = (x * x) / 0.65 + (y * y) / 0.85;
-      const z = Math.max(0, (1 - r2) * 0.085);
+      const r2 = (x * x) / 0.24 + (y * y) / 0.30;
+      const z = Math.max(0, (1 - r2) * 0.055);
       pos.setZ(i, z);
     }
     geo.computeVertexNormals();
@@ -267,16 +254,20 @@ export function PritomNamastePortrait3D({
     };
   }, [portraitPlaneGeo]);
 
-  // Materials calibrated directly to Pritom's actual blazer, white shirt cuff, and skin tone
   const materials = useMemo(() => {
     const blazer = new THREE.MeshStandardMaterial({
       color: portraitData?.blazerColor ?? '#b1967e',
       roughness: 0.78,
       metalness: 0.04,
     });
-    const cuff = new THREE.MeshStandardMaterial({
-      color: '#f2f2f4',
-      roughness: 0.68,
+    const blazerDark = new THREE.MeshStandardMaterial({
+      color: '#957b65',
+      roughness: 0.82,
+      metalness: 0.04,
+    });
+    const shirt = new THREE.MeshStandardMaterial({
+      color: '#f3f3f5',
+      roughness: 0.72,
       metalness: 0.02,
     });
     const skin = new THREE.MeshStandardMaterial({
@@ -298,7 +289,7 @@ export function PritomNamastePortrait3D({
       side: THREE.DoubleSide,
       toneMapped: false,
     });
-    return { blazer, cuff, skin, torsoMat, headMat };
+    return { blazer, blazerDark, shirt, skin, torsoMat, headMat };
   }, [portraitData]);
 
   useEffect(() => {
@@ -307,121 +298,156 @@ export function PritomNamastePortrait3D({
     };
   }, [materials]);
 
-  // Build skeletal rig combining Pritom's layered photo (TorsoBone -> HeadBone)
-  // with tailored blazer arms & articulated palms for the scroll-driven Namaskar.
+  // Full upper-body skeletal rig:
+  // Combines Pritom's actual split portrait (TorsoBone -> HeadBone) with a proportional
+  // tailored tan-blazer torso extension & full arms/hands that execute a complete
+  // traditional Namaskar (Anjali Mudra) at heart center when scrolling.
   const rig = useMemo(() => {
     const root = new THREE.Group();
 
     const torsoBone = new THREE.Bone();
     torsoBone.name = 'TorsoBone';
-    torsoBone.position.set(0, -0.32, 0);
+    torsoBone.position.set(0, -0.05, 0);
     root.add(torsoBone);
 
-    // Head pivot positioned right at base of neck (matching photo split line)
     const headBone = new THREE.Bone();
     headBone.name = 'HeadBone';
-    headBone.position.set(0, 0.24, 0.01);
+    headBone.position.set(0, 0.10, 0.015);
     torsoBone.add(headBone);
 
-    // Attach Torso Photo Layer
+    // Torso Photo Layer (shoulders, collar, lapels, upper chest)
     const torsoMesh = new THREE.Mesh(portraitPlaneGeo, materials.torsoMat);
-    torsoMesh.position.set(0, 0.44, 0);
+    torsoMesh.position.set(0, 0.30, 0.01);
     torsoBone.add(torsoMesh);
 
-    // Attach Head Photo Layer (compensated by -headBone.position.y so image aligns 1:1 at rest)
+    // Head Photo Layer (seamless at rest; bows respectfully during Namaskar)
     const headMesh = new THREE.Mesh(portraitPlaneGeo, materials.headMat);
-    headMesh.position.set(0, 0.20, 0.002);
+    headMesh.position.set(0, 0.20, 0);
     headBone.add(headMesh);
 
-    // Arms group (smoothly rises from behind his blazer shoulders as user scrolls)
-    const armsAnchor = new THREE.Bone();
-    armsAnchor.name = 'ArmsAnchor';
-    armsAnchor.position.set(0, 0, 0);
-    torsoBone.add(armsAnchor);
+    // Seamless Lower Blazer Torso & White Dress Shirt Extension
+    const lowerBlazerGroup = new THREE.Group();
+    lowerBlazerGroup.position.set(0, -0.32, -0.015);
 
+    const blazerBody = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.35, 0.30, 0.60, 28),
+      materials.blazer
+    );
+    blazerBody.scale.set(1.16, 1, 0.52);
+    blazerBody.castShadow = true;
+    blazerBody.receiveShadow = true;
+    lowerBlazerGroup.add(blazerBody);
+
+    // Crisp white shirt placket peeking naturally between blazer lapels
+    const shirtFront = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.115, 0.075, 0.56, 20),
+      materials.shirt
+    );
+    shirtFront.position.set(0, 0.02, 0.115);
+    shirtFront.scale.set(1.0, 1, 0.42);
+    lowerBlazerGroup.add(shirtFront);
+
+    // Blazer front button
+    const button = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.016, 0.016, 0.01, 16),
+      materials.blazerDark
+    );
+    button.rotation.x = Math.PI / 2;
+    button.position.set(0, -0.06, 0.185);
+    lowerBlazerGroup.add(button);
+
+    torsoBone.add(lowerBlazerGroup);
+
+    // Full Proportional Arms anchored cleanly at his blazer shoulders
     const buildArmChain = (side: 1 | -1) => {
       const prefix = side === 1 ? 'Left' : 'Right';
       const upperArm = new THREE.Bone();
       upperArm.name = `${prefix}UpperArm`;
-      // Anchored directly inside his real blazer shoulders
-      upperArm.position.set(side * 0.42, -0.10, -0.05);
-      armsAnchor.add(upperArm);
+      upperArm.position.set(side * 0.35, -0.02, -0.02);
+      torsoBone.add(upperArm);
 
       const foreArm = new THREE.Bone();
       foreArm.name = `${prefix}ForeArm`;
-      foreArm.position.set(0, -0.32, 0);
+      foreArm.position.set(0, -0.33, 0);
       upperArm.add(foreArm);
 
       const hand = new THREE.Bone();
       hand.name = `${prefix}Hand`;
-      hand.position.set(0, -0.28, 0);
+      hand.position.set(0, -0.305, 0);
       foreArm.add(hand);
 
-      // Tailored Blazer Sleeve (Upper)
-      const sleeveUpper = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.088, 0.072, 0.32, 22),
+      // Shoulder cap blending smoothly into photo blazer shoulders
+      const shoulderCap = new THREE.Mesh(
+        new THREE.SphereGeometry(0.095, 18, 16),
         materials.blazer
       );
-      sleeveUpper.position.set(0, -0.16, 0);
+      upperArm.add(shoulderCap);
+
+      // Upper blazer sleeve (0.33m)
+      const sleeveUpper = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.092, 0.076, 0.33, 22),
+        materials.blazer
+      );
+      sleeveUpper.position.set(0, -0.165, 0);
       sleeveUpper.castShadow = true;
       upperArm.add(sleeveUpper);
 
       const elbowJoint = new THREE.Mesh(
-        new THREE.SphereGeometry(0.072, 18, 16),
+        new THREE.SphereGeometry(0.076, 18, 16),
         materials.blazer
       );
       foreArm.add(elbowJoint);
 
-      // Tailored Blazer Sleeve (Forearm)
+      // Forearm blazer sleeve (0.28m)
       const sleeveFore = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.070, 0.056, 0.25, 22),
+        new THREE.CylinderGeometry(0.075, 0.058, 0.28, 22),
         materials.blazer
       );
-      sleeveFore.position.set(0, -0.125, 0);
+      sleeveFore.position.set(0, -0.14, 0);
       sleeveFore.castShadow = true;
       foreArm.add(sleeveFore);
 
-      // Crisp White Shirt Cuff matching his inner shirt
+      // Crisp white dress shirt cuff
       const shirtCuff = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.057, 0.052, 0.032, 20),
-        materials.cuff
+        new THREE.CylinderGeometry(0.056, 0.051, 0.036, 20),
+        materials.shirt
       );
-      shirtCuff.position.set(0, -0.262, 0);
+      shirtCuff.position.set(0, -0.292, 0);
       foreArm.add(shirtCuff);
 
-      // Wrist & Sculpted Palm + Articulated Fingers
+      // Wrist & Proportional Sculpted Palm + Articulated Fingers
       const wrist = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.038, 0.034, 0.035, 16),
+        new THREE.CylinderGeometry(0.037, 0.034, 0.034, 16),
         materials.skin
       );
       wrist.position.set(0, -0.012, 0);
       hand.add(wrist);
 
       const palm = new THREE.Mesh(
-        new THREE.BoxGeometry(0.026, 0.095, 0.082),
+        new THREE.BoxGeometry(0.030, 0.115, 0.096),
         materials.skin
       );
-      palm.position.set(0, -0.072, 0);
+      palm.position.set(0, -0.076, 0);
       palm.castShadow = true;
       hand.add(palm);
 
-      const fOffsets = [-0.029, -0.010, 0.010, 0.029];
-      const fLengths = [0.068, 0.080, 0.076, 0.060];
+      const fOffsets = [-0.034, -0.011, 0.012, 0.034];
+      const fLengths = [0.074, 0.088, 0.082, 0.062];
       fOffsets.forEach((fz, i) => {
         const finger = new THREE.Mesh(
-          new THREE.CapsuleGeometry(0.009, fLengths[i], 6, 10),
+          new THREE.CapsuleGeometry(0.0105, fLengths[i], 6, 10),
           materials.skin
         );
-        finger.position.set(0, -0.152, fz);
+        finger.position.set(0, -0.172, fz);
         finger.castShadow = true;
         hand.add(finger);
       });
 
       const thumb = new THREE.Mesh(
-        new THREE.CapsuleGeometry(0.010, 0.052, 6, 10),
+        new THREE.CapsuleGeometry(0.0115, 0.062, 6, 10),
         materials.skin
       );
-      thumb.position.set(side * -0.004, -0.068, 0.052);
+      thumb.position.set(side * -0.005, -0.072, 0.062);
       thumb.rotation.x = 0.45;
       hand.add(thumb);
     };
@@ -429,7 +455,6 @@ export function PritomNamastePortrait3D({
     buildArmChain(1);
     buildArmChain(-1);
 
-    // Kinematic solver for clean Namaskar alignment
     const aimDownAxis = (dir: THREE.Vector3) =>
       new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir.clone().normalize());
 
@@ -441,7 +466,7 @@ export function PritomNamastePortrait3D({
     ) => {
       const uDir = new THREE.Vector3(...elbowDir).normalize();
       const qUpper = aimDownAxis(uDir);
-      const elbowPos = uDir.clone().multiplyScalar(0.32);
+      const elbowPos = uDir.clone().multiplyScalar(0.33);
       const wristPos = new THREE.Vector3(...wristOffsetFromShoulder);
       const foreWorldDir = wristPos.sub(elbowPos).normalize();
       const foreLocalDir = foreWorldDir.clone().applyQuaternion(qUpper.clone().invert());
@@ -454,46 +479,51 @@ export function PritomNamastePortrait3D({
       return { upper: qUpper, fore: qFore, hand: qHand };
     };
 
-    // Normalized scroll keyframes:
-    // 0.00 -> 0.14: Clean real portrait at rest (arms tucked below/behind blazer edge)
-    // 0.14 -> 0.48: Visitor scrolls -> sleeves rise smoothly & palms sweep inward
-    // 0.48 -> 0.78: Full Namaskar joined palms at chest + respectful head bow on real photo!
-    // 0.78 -> 1.00: Head lifts gracefully back up while holding poised welcoming Namaskar
-    const times = [0.0, 0.12, 0.34, 0.56, 0.74, 1.0];
+    // Full Namaskar Scroll Choreography:
+    // 0.00 - 0.10: Natural relaxed standing pose (arms comfortably at sides)
+    // 0.10 - 0.34: Arms sweep smoothly forward & upward; elbows fold toward heart center
+    // 0.34 - 0.72: Full Namaskar — palms pressed flush together at heart center + deep respectful bow
+    // 0.72 - 1.00: Head lifts warmly back up while holding the full Namaskar palms joined at chest
+    const times = [0.0, 0.10, 0.32, 0.54, 0.72, 1.0];
 
     const buildArmTracks = (side: 1 | -1) => {
       const prefix = side === 1 ? 'Left' : 'Right';
+      // 1. Relaxed standing arms at sides (forearm reach = 0.305m)
       const p0 = solveArm(
         side,
-        [side * 0.12, -0.30, -0.10],
-        [side * 0.15, -0.58, -0.10],
-        [0, 0, 0]
+        [side * 0.04, -0.33, 0.02],
+        [side * 0.05, -0.63, 0.05],
+        [0.05, 0, side * -0.05]
       );
+      // 2. Gentle initiation
       const p1 = solveArm(
         side,
-        [side * 0.10, -0.28, 0.02],
-        [side * 0.08, -0.52, 0.08],
-        [0.4, 0, side * 0.1]
+        [side * 0.08, -0.31, 0.08],
+        [side * 0.02, -0.52, 0.24],
+        [0.55, 0, side * -0.04]
       );
+      // 3. Sweeping elbows & forearms upward toward sternum
       const p2 = solveArm(
         side,
-        [side * 0.08, -0.24, 0.14],
-        [side * -0.14, -0.26, 0.28],
-        [Math.PI * 0.78, side * 0.06, side * 0.05]
+        [side * 0.08, -0.29, 0.12],
+        [side * -0.14, -0.25, 0.29],
+        [Math.PI * 0.85, side * 0.04, side * 0.02]
       );
-      // Joined Namaskar palms cleanly centered at x = ±0.015, y = -0.10 relative to shoulder (below chin!)
+      // 4. Full Namaskar — exact 0.305m forearm reach bringing palms flush to x = ±0.017 at heart center
       const p3 = solveArm(
         side,
-        [side * 0.02, -0.25, 0.18],
-        [side * -0.405, -0.10, 0.31],
-        [Math.PI - 0.24, side * 0.06, side * 0.03]
+        [side * -0.08, -0.26, 0.18],
+        [side * -0.333, -0.14, 0.30],
+        [Math.PI + 0.14, 0, side * 0.02]
       );
+      // 5. Hold full Namaskar through respectful bow
       const p4 = p3;
+      // 6. Keep full Namaskar hands poised cleanly at heart center as head lifts
       const p5 = solveArm(
         side,
-        [side * 0.03, -0.26, 0.17],
-        [side * -0.402, -0.13, 0.30],
-        [Math.PI - 0.20, side * 0.05, side * 0.02]
+        [side * -0.08, -0.26, 0.18],
+        [side * -0.333, -0.15, 0.30],
+        [Math.PI + 0.12, 0, side * 0.02]
       );
 
       const poses = [p0, p1, p2, p3, p4, p5];
@@ -516,59 +546,28 @@ export function PritomNamastePortrait3D({
       ];
     };
 
-    // Arms slide subtly forward/up from behind blazer base as scroll begins
-    const armsAnchorPosTrack = new THREE.VectorKeyframeTrack(
-      'ArmsAnchor.position',
-      times,
-      [
-        0, -0.34, -0.16, // tucked cleanly out of sight at rest
-        0, -0.18, -0.06,
-        0, -0.02, 0.02,
-        0, 0.02, 0.04, // aligned naturally with shoulders during Namaskar
-        0, 0.02, 0.04,
-        0, 0.0, 0.03,
-      ]
-    );
-    armsAnchorPosTrack.setInterpolation(THREE.InterpolateSmooth);
-
-    const armsAnchorScaleTrack = new THREE.VectorKeyframeTrack(
-      'ArmsAnchor.scale',
-      times,
-      [
-        0.72, 0.72, 0.72,
-        0.92, 0.92, 0.92,
-        1, 1, 1,
-        1, 1, 1,
-        1, 1, 1,
-        1, 1, 1,
-      ]
-    );
-    armsAnchorScaleTrack.setInterpolation(THREE.InterpolateSmooth);
-
     const tracks: THREE.KeyframeTrack[] = [
       makeEulerTrack('TorsoBone', times, [
         [0, 0, 0],
         [0.01, 0, 0],
-        [0.03, 0, 0],
-        [0.07, 0, 0], // gentle respectful forward bow
-        [0.07, 0, 0],
+        [0.04, 0, 0],
+        [0.09, 0, 0], // respectful torso lean forward
+        [0.09, 0, 0],
         [0.02, 0, 0],
       ]),
       makeEulerTrack('HeadBone', times, [
         [0, 0, 0],
         [-0.02, 0, 0],
-        [0.04, 0, 0],
-        [0.16, 0, 0], // warm Namaskar bow of real portrait head
-        [0.18, 0, 0],
-        [0.01, 0, 0],
+        [0.05, 0, 0],
+        [0.18, 0, 0], // full dignified Namaskar head bow
+        [0.19, 0, 0],
+        [0.0, 0, 0],
       ]),
-      armsAnchorPosTrack,
-      armsAnchorScaleTrack,
       ...buildArmTracks(1),
       ...buildArmTracks(-1),
     ];
 
-    const clip = new THREE.AnimationClip('PortraitNamaskar', 1.0, tracks);
+    const clip = new THREE.AnimationClip('FullNamaskar', 1.0, tracks);
     const mixer = new THREE.AnimationMixer(root);
     const action = mixer.clipAction(clip);
     action.play();
@@ -585,18 +584,17 @@ export function PritomNamastePortrait3D({
 
   useFrame(({ clock }, delta) => {
     const t = clock.getElapsedTime();
-    const p = reducedMotion ? 0.65 : THREE.MathUtils.clamp(scrollProgressRef.current, 0, 1);
+    const p = reducedMotion ? 0.62 : THREE.MathUtils.clamp(scrollProgressRef.current, 0, 1);
 
-    // Scrub Namaskar animation directly from scroll progress
     rig.action.time = p;
     rig.mixer.update(0);
 
     if (stageGroupRef.current) {
-      const baseX = isCompact ? 0 : 0.60;
-      const baseY = isCompact ? 0.24 : 0.02;
-      const px = reducedMotion ? 0 : pointer.x * 0.11;
-      const py = reducedMotion ? 0 : pointer.y * 0.06;
-      const floatY = reducedMotion ? 0 : Math.sin(t * 1.1) * 0.015;
+      const baseX = isCompact ? 0 : 0.48;
+      const baseY = isCompact ? 0.16 : 0.02;
+      const px = reducedMotion ? 0 : pointer.x * 0.10;
+      const py = reducedMotion ? 0 : pointer.y * 0.05;
+      const floatY = reducedMotion ? 0 : Math.sin(t * 1.1) * 0.010;
 
       const lambda = reducedMotion ? 20 : 6;
       stageGroupRef.current.position.x = THREE.MathUtils.damp(
@@ -613,7 +611,7 @@ export function PritomNamastePortrait3D({
       );
       stageGroupRef.current.rotation.y = THREE.MathUtils.damp(
         stageGroupRef.current.rotation.y,
-        -0.12 + px + p * 0.08,
+        -0.08 + px + p * 0.05,
         lambda,
         delta
       );
@@ -631,10 +629,10 @@ export function PritomNamastePortrait3D({
   });
 
   return (
-    <group ref={stageGroupRef} position={[isCompact ? 0 : 0.60, isCompact ? 0.24 : 0.02, 0]}>
-      {/* Subtle Architectural Halo Framing Behind Pritom's Portrait */}
-      <mesh ref={ringRef} position={[0, 0.18, -0.28]}>
-        <torusGeometry args={[0.92, 0.005, 12, 96]} />
+    <group ref={stageGroupRef} position={[isCompact ? 0 : 0.48, isCompact ? 0.16 : 0.02, 0]}>
+      {/* Architectural Halo Framing */}
+      <mesh ref={ringRef} position={[0, 0.10, -0.28]}>
+        <torusGeometry args={[0.76, 0.0045, 12, 96]} />
         <meshStandardMaterial
           color="#6366f1"
           metalness={0.85}
@@ -643,9 +641,9 @@ export function PritomNamastePortrait3D({
           emissiveIntensity={0.28}
         />
       </mesh>
-      <mesh position={[0, 0.18, -0.34]}>
-        <circleGeometry args={[0.88, 64]} />
-        <meshBasicMaterial color="#141422" transparent opacity={0.45} />
+      <mesh position={[0, 0.10, -0.34]}>
+        <circleGeometry args={[0.73, 64]} />
+        <meshBasicMaterial color="#141422" transparent opacity={0.42} />
       </mesh>
 
       <primitive object={rig.root} />

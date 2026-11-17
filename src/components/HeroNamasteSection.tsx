@@ -59,7 +59,7 @@ export function HeroNamasteSection({
     }
   };
 
-  const isNamaskarActive = progressPct >= 28 && progressPct <= 85;
+  const isNamaskarActive = progressPct >= 30;
 
   return (
     <section

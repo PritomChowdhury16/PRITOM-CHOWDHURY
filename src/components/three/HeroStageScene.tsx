@@ -46,16 +46,16 @@ function CameraChoreographer({
   const isCompact = size.width < 900;
 
   useFrame((_, delta) => {
-    const p = reducedMotion ? 0.65 : THREE.MathUtils.clamp(scrollProgressRef.current, 0, 1);
+    const p = reducedMotion ? 0.62 : THREE.MathUtils.clamp(scrollProgressRef.current, 0, 1);
 
-    const camX = isCompact ? 0 : THREE.MathUtils.lerp(-0.14, 0.08, p);
-    const camY = isCompact ? 0.05 : THREE.MathUtils.lerp(0.14, 0.02, p);
+    const camX = isCompact ? 0 : THREE.MathUtils.lerp(-0.14, 0.05, p);
+    const camY = isCompact ? 0.04 : THREE.MathUtils.lerp(0.06, -0.02, p);
     const camZ = isCompact
-      ? THREE.MathUtils.lerp(3.55, 3.05, p)
-      : THREE.MathUtils.lerp(3.15, 2.65, p);
+      ? THREE.MathUtils.lerp(3.05, 2.60, p)
+      : THREE.MathUtils.lerp(2.75, 2.35, p);
 
-    const lookX = isCompact ? 0 : THREE.MathUtils.lerp(0.18, 0.24, p);
-    const lookY = isCompact ? 0.08 : THREE.MathUtils.lerp(0.10, -0.02, p);
+    const lookX = isCompact ? 0 : THREE.MathUtils.lerp(0.14, 0.20, p);
+    const lookY = isCompact ? 0.04 : THREE.MathUtils.lerp(0.04, -0.04, p);
 
     targetPos.set(camX, camY, camZ);
     targetLook.set(lookX, lookY, 0);
@@ -86,7 +86,7 @@ export function HeroStageScene({
     <Canvas
       shadows={!isSoftwareGl}
       dpr={isSoftwareGl ? 1 : [1, 2]}
-      camera={{ position: [-0.14, 0.14, 3.15], fov: 36, near: 0.1, far: 30 }}
+      camera={{ position: [-0.14, 0.06, 2.75], fov: 36, near: 0.1, far: 30 }}
       gl={{
         antialias: !isSoftwareGl,
         powerPreference: 'high-performance',

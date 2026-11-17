@@ -2,5 +2,7 @@
   "name": "Pritom Chowdhury — 3D Portfolio",
   "description": "Immersive 3D personal portfolio of Pritom Chowdhury — AI Content Writer, Frontend Developer, Graphics Designer, and Founder of Hack with AI.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
